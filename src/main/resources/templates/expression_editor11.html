@@ -1,0 +1,740 @@
+<!DOCTYPE html>
+<html lang="zh">
+<head>
+    <meta charset="UTF-8">
+    <title>动态表达式配置</title>
+    <link href="https://cdnjs.cloudflare.com/ajax/libs/jsoneditor/9.10.2/jsoneditor.min.css" rel="stylesheet" type="text/css">
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/jsoneditor/9.10.2/jsoneditor.min.js"></script>
+    <style>
+        /* 基础样式 */
+        body { font-family: Arial, sans-serif; padding: 20px; }
+        h1 { color: #333; }
+        button { cursor: pointer; padding: 8px 12px; border: 1px solid #ccc; background-color: #f0f0f0; border-radius: 4px; }
+        button:hover { background-color: #e0e0e0; }
+        button:disabled { background-color: #eee; color: #aaa; cursor: not-allowed; }
+        select, input[type="text"], input[type="number"], input[type="date"], input[type="time"] { padding: 6px; border: 1px solid #ccc; border-radius: 4px; }
+
+        /* 节点样式 */
+        .node-container { border: 1px solid #ccc; padding: 15px; margin-bottom: 10px; border-radius: 5px; }
+        .logic-node { border-left: 3px solid #007bff; }
+        .condition-node { border-left: 3px solid #28a745; }
+        .node-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 10px; }
+        .node-header button { margin-left: 5px; }
+        .children-container { margin-left: 20px; }
+
+        /* 统一的配置块样式 */
+        .operand-config, .comparison-select-container, .difference-config {
+            border: 1px dashed #ccc;
+            padding: 10px;
+            margin-top: 5px;
+            margin-right: 10px;
+            margin-bottom: 10px;
+        }
+
+        /* Flexbox 布局 */
+        .comparison-row {
+            display: flex;
+            align-items: center;
+            flex-wrap: wrap;
+        }
+
+        /* Modal Styles */
+        .modal {
+            display: none;
+            position: fixed;
+            z-index: 1000;
+            left: 0;
+            top: 0;
+            width: 100%;
+            height: 100%;
+            overflow: auto;
+            background-color: rgba(0,0,0,0.4);
+            justify-content: center;
+            align-items: center;
+        }
+        .modal-content {
+            background-color: #fefefe;
+            padding: 20px;
+            border: 1px solid #888;
+            border-radius: 8px;
+            width: 80%;
+            max-width: 500px;
+        }
+        .modal-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 20px;
+        }
+        .modal-footer {
+            margin-top: 20px;
+            text-align: right;
+        }
+        .close-btn {
+            color: #aaa;
+            font-size: 28px;
+            font-weight: bold;
+            cursor: pointer;
+        }
+
+        /* jsoneditor container style */
+        #json-editor-container {
+            width: 100%;
+            height: 1000px;
+            margin-top: 20px;
+            display: none;
+        }
+
+        .json-load-section {
+            margin-bottom: 20px;
+            border: 1px dashed #ddd;
+            padding: 15px;
+            border-radius: 5px;
+        }
+        .json-load-section textarea {
+            width: 98%;
+            min-height: 100px;
+            padding: 5px;
+        }
+    </style>
+</head>
+<body>
+
+<h1>动态表达式配置</h1>
+
+<div class="json-load-section">
+    <h3>从 JSON 加载配置</h3>
+    <textarea id="json-input" placeholder="将 JSON 表达式或包含表达式的完整请求体粘贴到这里"></textarea>
+    <button id="load-json-btn">加载 JSON</button>
+</div>
+
+<div class="expression-root" id="expression-editor-root">
+</div>
+
+<div class="controls" style="margin-top: 20px;">
+    <button id="add-logic-btn">添加逻辑组</button>
+    <button id="add-condition-btn">添加条件</button>
+    <button id="generate-json-btn">生成 JSON</button>
+</div>
+
+<div id="json-editor-container"></div>
+
+<div id="db-field-modal" class="modal">
+    <div class="modal-content">
+        <div class="modal-header">
+            <h2>选择数据库字段</h2>
+            <span class="close-btn">&times;</span>
+        </div>
+        <div class="modal-body">
+            <div style="display: flex; gap: 10px;">
+                <div>
+                    <label>表:</label>
+                    <select id="modal-table-select"></select>
+                </div>
+                <div>
+                    <label>字段:</label>
+                    <select id="modal-field-select"></select>
+                </div>
+            </div>
+        </div>
+        <div class="modal-footer">
+            <button id="modal-cancel-btn">取消</button>
+            <button id="modal-confirm-btn">确认</button>
+        </div>
+    </div>
+</div>
+
+<script>
+    document.addEventListener('DOMContentLoaded', () => {
+        const rootContainer = document.getElementById('expression-editor-root');
+        const addLogicBtn = document.getElementById('add-logic-btn');
+        const addConditionBtn = document.getElementById('add-condition-btn');
+        const generateJsonBtn = document.getElementById('generate-json-btn');
+        const loadJsonBtn = document.getElementById('load-json-btn');
+        const jsonInput = document.getElementById('json-input');
+
+        // 获取 JSON Editor 容器
+        const editorContainer = document.getElementById('json-editor-container');
+        const options = {
+            mode: 'tree',
+            modes: ['tree', 'code', 'view', 'form', 'text'],
+            history: true,
+            onModeChange: function(newMode, oldMode) {
+                console.log('Mode changed from ' + oldMode + ' to ' + newMode);
+            }
+        };
+        const editor = new JSONEditor(editorContainer, options);
+
+        const dbFieldModal = document.getElementById('db-field-modal');
+        const modalTableSelect = document.getElementById('modal-table-select');
+        const modalFieldSelect = document.getElementById('modal-field-select');
+        const modalConfirmBtn = document.getElementById('modal-confirm-btn');
+        const modalCancelBtn = document.getElementById('modal-cancel-btn');
+        const modalCloseBtn = dbFieldModal.querySelector('.close-btn');
+
+        let nodeIdCounter = 0;
+        let currentOperandConfig = null;
+
+        // Mock 数据库表和字段数据
+        const MOCK_DB_SCHEMA = {
+            'user_profile': ['user_level', 'registration_date', 'date_of_birth', 'total_spend', 'initial_balance'],
+            'orders': ['order_id', 'order_amount', 'order_created_date', 'status'],
+            'products': ['product_id', 'product_name', 'price', 'category']
+        };
+
+        // 所有比较操作符及其分组
+        const COMPARISON_GROUPS = {
+            'general': [
+                { value: "EQUAL", text: "等于" },
+                { value: "NOT_EQUAL", text: "不等于" },
+                { value: "GREATER_THAN", text: "大于" },
+                { value: "LESS_THAN", text: "小于" },
+                { value: "GREATER_THAN_OR_EQUAL", text: "大于等于" },
+                { value: "LESS_THAN_OR_EQUAL", text: "小于等于" },
+                { value: "CONTAINS", text: "包含" },
+                { value: "STARTS_WITH", text: "以...开头" },
+                { value: "ENDS_WITH", text: "以...结尾" }
+            ],
+            'date-unit': [
+                { value: "EQUAL_YEAR", text: "年相等" },
+                { value: "EQUAL_MONTH", text: "月相等" },
+                { value: "EQUAL_DAY", text: "日相等" }
+            ],
+            'difference': [
+                { value: "DIFFERENCE_IN_YEARS", text: "年差值" },
+                { value: "DIFFERENCE_IN_MONTHS", text: "月差值" },
+                { value: "DIFFERENCE_IN_DAYS", text: "日差值" },
+                { value: "DIFFERENCE_IN_VALUE", text: "数值差值" }
+            ],
+            'null-empty': [
+                { value: "IS_NULL", text: "为空" },
+                { value: "IS_NOT_NULL", text: "不为空" },
+                { value: "IS_EMPTY", text: "字符串为空" },
+                { value: "IS_NOT_EMPTY", text: "字符串不为空" }
+            ]
+        };
+
+        const COMPARISON_OPTIONS = Object.keys(COMPARISON_GROUPS).map(group => {
+            const options = COMPARISON_GROUPS[group].map(op => `<option value="${op.value}">${op.text}</option>`).join('');
+            return `<optgroup label="${group}">${options}</optgroup>`;
+        }).join('');
+
+        // 左操作数（无固定值）
+        const LEFT_OPERAND_OPTIONS = `
+            <option value="context" selected>上下文</option>
+            <option value="database">数据库</option>
+        `;
+
+        // 右操作数（有固定值）
+        const RIGHT_OPERAND_OPTIONS = `
+            <option value="context" selected>上下文</option>
+            <option value="database">数据库</option>
+            <option value="literal">固定值</option>
+        `;
+
+        // HTML 模板生成函数
+        function createLogicNodeHtml(nodeId) {
+            return `
+                <div class="node-container logic-node" data-node-id="${nodeId}" data-type="LOGIC">
+                    <div class="node-header">
+                        <select class="operator-select">
+                            <option value="AND">并且 (AND)</option>
+                            <option value="OR">或者 (OR)</option>
+                        </select>
+                        <div>
+                            <button class="add-condition-child-btn">添加条件</button>
+                            <button class="add-logic-child-btn">添加逻辑组</button>
+                            <button class="remove-node-btn">移除</button>
+                        </div>
+                    </div>
+                    <div class="children-container"></div>
+                </div>
+            `;
+        }
+
+        function createConditionNodeHtml(nodeId) {
+            return `
+                <div class="node-container condition-node" data-node-id="${nodeId}" data-type="CONDITION">
+                    <div class="node-header">
+                        <span>条件</span>
+                        <button class="remove-node-btn">移除</button>
+                    </div>
+                    <div class="comparison-row">
+                        <div class="operand-config" data-operand-type="left">
+                            <select class="source-select">
+                                ${LEFT_OPERAND_OPTIONS}
+                            </select>
+                            <input type="text" placeholder="字段名" class="field-input">
+                            <input type="text" placeholder="选择字段" class="db-field-input" hidden readonly>
+                            <input type="hidden" class="table-name-input">
+                        </div>
+
+                        <div class="comparison-select-container">
+                            <select class="comparison-select">
+                                ${COMPARISON_OPTIONS}
+                            </select>
+                        </div>
+
+                        <div class="operand-config" data-operand-type="right">
+                            <select class="source-select">
+                                ${RIGHT_OPERAND_OPTIONS}
+                            </select>
+                            <input type="text" placeholder="值或字段名" class="field-input value-input">
+                            <input type="date" class="date-input" hidden>
+                            <input type="time" class="time-input" hidden>
+                            <input type="text" placeholder="选择字段" class="db-field-input" hidden readonly>
+                            <input type="hidden" class="table-name-input">
+                        </div>
+
+                        <div class="difference-config" hidden>
+                            <div class="operand-config">
+                                <select class="value-comparison-select">
+                                    <option value="EQUAL">等于</option>
+                                    <option value="NOT_EQUAL">不等于</option>
+                                    <option value="GREATER_THAN">大于</option>
+                                    <option value="LESS_THAN">小于</option>
+                                    <option value="GREATER_THAN_OR_EQUAL">大于等于</option>
+                                    <option value="LESS_THAN_OR_EQUAL">小于等于</option>
+                                </select>
+                                <input type="number" placeholder="数值" class="value-input">
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            `;
+        }
+
+        // 动态添加节点函数
+        function appendNode(type, parentContainer) {
+            nodeIdCounter++;
+            const html = type === 'LOGIC' ? createLogicNodeHtml(nodeIdCounter) : createConditionNodeHtml(nodeIdCounter);
+            parentContainer.insertAdjacentHTML('beforeend', html);
+            updateRootButtons();
+
+            const newNode = parentContainer.lastElementChild;
+            if (newNode.dataset.type === 'CONDITION') {
+                updateConditionNodeUI(newNode);
+            }
+        }
+
+        // --- 从 JSON 渲染界面 (已适配新结构) ---
+        function renderNode(nodeJson, parentContainer) {
+            nodeIdCounter++;
+            let htmlString;
+            let nodeElement;
+
+            if (nodeJson.type === 'LOGIC') {
+                htmlString = createLogicNodeHtml(nodeIdCounter);
+                parentContainer.insertAdjacentHTML('beforeend', htmlString);
+                nodeElement = parentContainer.lastElementChild;
+
+                const operatorSelect = nodeElement.querySelector('.operator-select');
+                operatorSelect.value = nodeJson.operator;
+
+                const childrenContainer = nodeElement.querySelector('.children-container');
+                nodeJson.children.forEach(childJson => {
+                    renderNode(childJson, childrenContainer);
+                });
+
+            } else if (nodeJson.type === 'CONDITION') {
+                htmlString = createConditionNodeHtml(nodeIdCounter);
+                parentContainer.insertAdjacentHTML('beforeend', htmlString);
+                nodeElement = parentContainer.lastElementChild;
+
+                const comparisonSelect = nodeElement.querySelector('.comparison-select');
+                comparisonSelect.value = nodeJson.comparison;
+
+                // 填充 Left Operand (已适配新结构)
+                const leftOperandElement = nodeElement.querySelector('.operand-config[data-operand-type="left"]');
+                const leftSourceSelect = leftOperandElement.querySelector('.source-select');
+                const leftFieldInput = leftOperandElement.querySelector('.field-input');
+                const leftDbFieldInput = leftOperandElement.querySelector('.db-field-input');
+                const leftTableNameInput = leftOperandElement.querySelector('.table-name-input');
+
+                leftSourceSelect.value = nodeJson.left.source || '';
+                if (nodeJson.left.source === 'context') {
+                    leftFieldInput.value = nodeJson.left.field || '';
+                } else if (nodeJson.left.source === 'database') {
+                    leftTableNameInput.value = nodeJson.left.table || '';
+                    leftDbFieldInput.value = nodeJson.left.field || '';
+                    // 优化: 在加载时也显示 table.field
+                    if (nodeJson.left.table && nodeJson.left.field) {
+                        leftDbFieldInput.value = `${nodeJson.left.table}.${nodeJson.left.field}`;
+                    }
+                }
+
+                // 填充 Right Operand (已适配新结构)
+                const rightOperandElement = nodeElement.querySelector('.operand-config[data-operand-type="right"]');
+                if (nodeJson.right) {
+                    const rightSourceSelect = rightOperandElement.querySelector('.source-select');
+                    const rightFieldInput = rightOperandElement.querySelector('.field-input.value-input');
+                    const rightDbFieldInput = rightOperandElement.querySelector('.db-field-input');
+                    const rightTableNameInput = rightOperandElement.querySelector('.table-name-input');
+                    const rightDateInput = rightOperandElement.querySelector('.date-input');
+                    const rightTimeInput = rightOperandElement.querySelector('.time-input');
+
+                    rightSourceSelect.value = nodeJson.right.source || '';
+                    if (nodeJson.right.source === 'literal') {
+                        const isDateValue = typeof nodeJson.right.value === 'string' && nodeJson.right.value.match(/\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2}/);
+                        if (isDateValue) {
+                            rightDateInput.value = nodeJson.right.value.split(' ')[0];
+                            rightTimeInput.value = nodeJson.right.value.split(' ')[1].substring(0, 5);
+                        } else {
+                            rightFieldInput.value = nodeJson.right.value;
+                        }
+                    } else if (nodeJson.right.source === 'context') {
+                        rightFieldInput.value = nodeJson.right.field || '';
+                    } else if (nodeJson.right.source === 'database') {
+                        rightTableNameInput.value = nodeJson.right.table || '';
+                        rightDbFieldInput.value = nodeJson.right.field || '';
+                        // 优化: 在加载时也显示 table.field
+                        if (nodeJson.right.table && nodeJson.right.field) {
+                            rightDbFieldInput.value = `${nodeJson.right.table}.${nodeJson.right.field}`;
+                        }
+                    }
+                }
+
+                // 填充 Difference Config
+                const differenceConfigElement = nodeElement.querySelector('.difference-config');
+                if (nodeJson.value !== undefined) {
+                    const valueInput = differenceConfigElement.querySelector('.value-input');
+                    const valueComparisonSelect = differenceConfigElement.querySelector('.value-comparison-select');
+                    valueComparisonSelect.value = nodeJson.valueComparison || 'EQUAL';
+                    valueInput.value = nodeJson.value;
+                }
+            } else {
+                console.error('Invalid node type:', nodeJson.type);
+                return;
+            }
+
+            // 在渲染完成后统一更新 UI，而不是在递归中进行
+            updateConditionNodeUI(nodeElement);
+        }
+
+        // --- 模态框逻辑 ---
+        function showModal(operandConfigElement) {
+            currentOperandConfig = operandConfigElement;
+            dbFieldModal.style.display = 'flex';
+            dbFieldModal.hidden = false;
+            loadTables(modalTableSelect);
+        }
+
+        function hideModal() {
+            dbFieldModal.style.display = 'none';
+            dbFieldModal.hidden = true;
+            currentOperandConfig = null;
+        }
+
+        modalCloseBtn.addEventListener('click', hideModal);
+        modalCancelBtn.addEventListener('click', hideModal);
+
+        // 优化: 在点击确认时显示 table.field
+        modalConfirmBtn.addEventListener('click', () => {
+            const selectedTable = modalTableSelect.value;
+            const selectedField = modalFieldSelect.value;
+
+            if (selectedTable && selectedField) {
+                const sourceSelect = currentOperandConfig.querySelector('.source-select');
+                const dbFieldInput = currentOperandConfig.querySelector('.db-field-input');
+                const tableNameInput = currentOperandConfig.querySelector('.table-name-input');
+
+                tableNameInput.value = selectedTable;
+                dbFieldInput.value = `${selectedTable}.${selectedField}`; // 显示为 table.field
+                sourceSelect.value = 'database';
+
+                const conditionNode = currentOperandConfig.closest('.condition-node');
+                if (conditionNode) {
+                    updateConditionNodeUI(conditionNode);
+                }
+
+                hideModal();
+            } else {
+                alert('请选择完整的表和字段！');
+            }
+        });
+
+        // 核心 UI 更新函数
+        function updateConditionNodeUI(node) {
+            const comparisonSelect = node.querySelector('.comparison-select');
+            const comparisonValue = comparisonSelect.value;
+
+            const leftOperandContainer = node.querySelector('.operand-config[data-operand-type="left"]');
+            const leftSourceSelect = leftOperandContainer.querySelector('.source-select');
+
+            const rightOperandContainer = node.querySelector('.operand-config[data-operand-type="right"]');
+            const rightSourceSelect = rightOperandContainer.querySelector('.source-select');
+
+            // 明确区分日期和数值的比较类型
+            const isDateComparison = (
+                COMPARISON_GROUPS['date-unit'].some(op => op.value === comparisonValue) ||
+                ['DIFFERENCE_IN_YEARS', 'DIFFERENCE_IN_MONTHS', 'DIFFERENCE_IN_DAYS'].includes(comparisonValue)
+            );
+            const isNullEmpty = COMPARISON_GROUPS['null-empty'].some(op => op.value === comparisonValue);
+            const isDifference = COMPARISON_GROUPS['difference'].some(op => op.value === comparisonValue);
+
+            rightOperandContainer.hidden = isNullEmpty;
+
+            const differenceConfig = node.querySelector('.difference-config');
+            differenceConfig.hidden = !isDifference;
+
+            // Update left operand UI
+            const leftValueInput = leftOperandContainer.querySelector('.field-input');
+            const leftDbFieldInput = leftOperandContainer.querySelector('.db-field-input');
+
+            if (leftSourceSelect.value === 'database') {
+                leftValueInput.hidden = true;
+                leftDbFieldInput.hidden = false;
+            } else { // context
+                leftValueInput.hidden = false;
+                leftDbFieldInput.hidden = true;
+            }
+
+            // Update right operand UI
+            const rightValueInput = rightOperandContainer.querySelector('.field-input.value-input');
+            const rightDateInput = rightOperandContainer.querySelector('.date-input');
+            const rightTimeInput = rightOperandContainer.querySelector('.time-input');
+            const rightDbFieldInput = rightOperandContainer.querySelector('.db-field-input');
+
+            const isLiteral = rightSourceSelect && rightSourceSelect.value === 'literal';
+            const isDatabase = rightSourceSelect && rightSourceSelect.value === 'database';
+            const isContext = rightSourceSelect && rightSourceSelect.value === 'context';
+
+            if (isLiteral) {
+                rightValueInput.hidden = isDateComparison;
+                rightDateInput.hidden = !isDateComparison;
+                rightTimeInput.hidden = !isDateComparison;
+                rightDbFieldInput.hidden = true;
+            } else if (isDatabase) {
+                rightValueInput.hidden = true;
+                rightDateInput.hidden = true;
+                rightTimeInput.hidden = true;
+                rightDbFieldInput.hidden = false;
+            } else if (isContext) {
+                rightValueInput.hidden = false;
+                rightDateInput.hidden = true;
+                rightTimeInput.hidden = true;
+                rightDbFieldInput.hidden = true;
+            }
+        }
+
+        function loadTables(tableSelect) {
+            tableSelect.innerHTML = '<option value="">--选择表--</option>';
+            Object.keys(MOCK_DB_SCHEMA).forEach(table => {
+                const option = document.createElement('option');
+                option.value = table;
+                option.textContent = table;
+                tableSelect.appendChild(option);
+            });
+            loadFields(tableSelect);
+        }
+
+        function loadFields(tableSelect) {
+            const selectedTable = tableSelect.value;
+            const fieldSelect = tableSelect.closest('.modal-body').querySelector('#modal-field-select');
+            fieldSelect.innerHTML = '<option value="">--选择字段--</option>';
+            if (selectedTable && MOCK_DB_SCHEMA[selectedTable]) {
+                MOCK_DB_SCHEMA[selectedTable].forEach(field => {
+                    const option = document.createElement('option');
+                    option.value = field;
+                    option.textContent = field;
+                    fieldSelect.appendChild(option);
+                });
+            }
+        }
+
+        // --- 已优化：添加了验证逻辑的 JSON 生成函数 (已适配新结构) ---
+        function buildOperandJson(operandElement) {
+            const sourceSelect = operandElement.querySelector('.source-select');
+            const source = sourceSelect.value;
+            const operand = {};
+
+            if (source === 'context') {
+                const fieldInput = operandElement.querySelector('.field-input');
+                if (!fieldInput.value.trim()) {
+                    throw new Error('“上下文”的字段名不能为空。');
+                }
+                Object.assign(operand, { source: 'context', field: fieldInput.value });
+            } else if (source === 'literal') {
+                const fieldInput = operandElement.querySelector('.field-input');
+                const dateInput = operandElement.querySelector('.date-input');
+                const timeInput = operandElement.querySelector('.time-input');
+                let value;
+                if (!dateInput.hidden) {
+                    const dateValue = dateInput.value;
+                    const timeValue = timeInput.value;
+                    if (!dateValue && !timeValue) {
+                        throw new Error('“固定值”的日期和时间不能为空。');
+                    }
+                    if (dateValue && timeValue) {
+                        value = `${dateValue} ${timeValue}:00`;
+                    } else if (dateValue) {
+                        value = `${dateValue} 00:00:00`;
+                    } else {
+                        value = null; // 仅有时间无意义
+                    }
+                } else {
+                    value = fieldInput.value;
+                    if (!isNaN(Number(value)) && value !== '') {
+                        value = Number(value);
+                    } else if (value === 'true' || value === 'false') {
+                        value = value === 'true';
+                    }
+                }
+                Object.assign(operand, { source: 'literal', value: value });
+            } else if (source === 'database') {
+                const dbFieldInput = operandElement.querySelector('.db-field-input');
+                const tableNameInput = operandElement.querySelector('.table-name-input');
+                if (!tableNameInput.value || !dbFieldInput.value) {
+                    throw new Error('请选择完整的数据库表和字段。');
+                }
+                // 关键改动：将表名和字段名分别放入 table 和 field 字段
+                const parts = dbFieldInput.value.split('.');
+                const table = parts[0];
+                const field = parts[1];
+                Object.assign(operand, { source: 'database', table: table, field: field });
+            }
+            return operand;
+        }
+
+        function buildJsonFromNode(nodeElement) {
+            const type = nodeElement.dataset.type;
+            const node = { type: type };
+
+            if (type === 'LOGIC') {
+                node.operator = nodeElement.querySelector('.operator-select').value;
+                node.children = [];
+                nodeElement.querySelectorAll(':scope > .children-container > .node-container').forEach(childElement => {
+                    node.children.push(buildJsonFromNode(childElement));
+                });
+            } else if (type === 'CONDITION') {
+                const comparison = nodeElement.querySelector('.comparison-select').value;
+                const leftOperandElement = nodeElement.querySelector('.operand-config[data-operand-type="left"]');
+                const rightOperandElement = nodeElement.querySelector('.operand-config[data-operand-type="right"]');
+                const differenceConfigElement = nodeElement.querySelector('.difference-config');
+
+                node.comparison = comparison;
+                node.left = buildOperandJson(leftOperandElement);
+
+                const isNullEmpty = COMPARISON_GROUPS['null-empty'].some(op => op.value === comparison);
+                const isDifference = COMPARISON_GROUPS['difference'].some(op => op.value === comparison);
+
+                if (!isNullEmpty) {
+                    node.right = buildOperandJson(rightOperandElement);
+                }
+                if (isDifference) {
+                    const valueInput = differenceConfigElement.querySelector('.value-input');
+                    const valueComparison = differenceConfigElement.querySelector('.value-comparison-select').value;
+                    if (!valueInput.value) {
+                        throw new Error('“差值”的数值不能为空。');
+                    }
+                    node.value = Number(valueInput.value);
+                    node.valueComparison = valueComparison;
+                }
+            }
+            return node;
+        }
+
+        // 事件监听器
+        addLogicBtn.addEventListener('click', () => appendNode('LOGIC', rootContainer));
+
+        addConditionBtn.addEventListener('click', () => appendNode('CONDITION', rootContainer));
+
+        rootContainer.addEventListener('click', (event) => {
+            const target = event.target;
+            if (target.classList.contains('add-logic-child-btn')) {
+                const parent = target.closest('.logic-node').querySelector('.children-container');
+                appendNode('LOGIC', parent);
+            } else if (target.classList.contains('add-condition-child-btn')) {
+                const parent = target.closest('.logic-node').querySelector('.children-container');
+                appendNode('CONDITION', parent);
+            } else if (target.classList.contains('remove-node-btn')) {
+                target.closest('.node-container').remove();
+                updateRootButtons();
+            } else if (target.classList.contains('db-field-input')) {
+                const operandConfig = target.closest('.operand-config');
+                showModal(operandConfig);
+            }
+        });
+
+        rootContainer.addEventListener('change', (event) => {
+            const node = event.target.closest('.condition-node');
+            if (node) {
+                updateConditionNodeUI(node);
+            }
+        });
+
+        modalTableSelect.addEventListener('change', () => {
+            loadFields(modalTableSelect);
+        });
+
+        generateJsonBtn.addEventListener('click', () => {
+            const rootNodes = rootContainer.querySelectorAll(':scope > .node-container');
+            if (rootNodes.length === 0) {
+                alert('请先添加并配置一个表达式节点。');
+                return;
+            }
+            if (rootNodes.length > 1) {
+                alert('请只保留一个根节点。');
+                return;
+            }
+
+            try {
+                const json = buildJsonFromNode(rootNodes[0]);
+                editorContainer.style.display = 'block';
+                editor.set(json);
+            } catch (error) {
+                alert('JSON 生成失败：\n' + error.message);
+                console.error(error);
+            }
+        });
+
+        loadJsonBtn.addEventListener('click', () => {
+            const jsonString = jsonInput.value.trim();
+            if (!jsonString) {
+                alert('JSON 输入为空，请粘贴 JSON 字符串。');
+                return;
+            }
+
+            try {
+                let jsonObject = JSON.parse(jsonString);
+
+                // 修复逻辑：检查是否为包含表达式的完整请求体 JSON 或数组
+                if (jsonObject.expressionJson && typeof jsonObject.expressionJson === 'string') {
+                    jsonObject = JSON.parse(jsonObject.expressionJson);
+                }
+
+                rootContainer.innerHTML = '';
+                nodeIdCounter = 0;
+
+                if (Array.isArray(jsonObject)) {
+                    if (jsonObject.length > 1) {
+                        alert('检测到多个根节点。目前UI仅支持单个根节点。将仅加载第一个节点。');
+                    }
+                    if (jsonObject.length > 0) {
+                        renderNode(jsonObject[0], rootContainer);
+                    }
+                } else {
+                    renderNode(jsonObject, rootContainer);
+                }
+
+                updateRootButtons();
+
+            } catch (e) {
+                alert('JSON 格式不正确：' + e.message);
+                console.error('JSON parse error:', e);
+            }
+        });
+
+        function updateRootButtons() {
+            const rootNodes = rootContainer.querySelectorAll(':scope > .node-container');
+            const hasRootNode = rootNodes.length > 0;
+
+            addLogicBtn.disabled = hasRootNode;
+            addConditionBtn.disabled = hasRootNode;
+        }
+
+        updateRootButtons();
+    });
+</script>
+</body>
+</html>
