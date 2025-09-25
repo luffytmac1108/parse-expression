@@ -1,7 +1,6 @@
 package com.yxw.expression.resolve.expression;
 
 import cn.hutool.core.convert.Convert;
-
 import cn.hutool.core.util.StrUtil;
 import com.yxw.expression.resolve.component.FetchTableData;
 import com.yxw.expression.resolve.enums.ComparisonEnum;
@@ -44,10 +43,10 @@ public class ConditionEvaluator {
      */
     public boolean evaluate(BaseNode node, Map<String, Object> contextData) {
         if (node instanceof LogicNode lNode) {
+            //逻辑节点判断
             return evaluateLogicNode(lNode, contextData);
         } else if (node instanceof ConditionNode cNode) {
-            // 这里调用处理单个条件的逻辑
-            // 这是一个简单的示例，实际实现需要更复杂
+            //条件节点判断
             return evaluateConditionNode(cNode, contextData);
         }
         throw new IllegalArgumentException("Unsupported node type: " + node.getClass().getName());
@@ -83,9 +82,9 @@ public class ConditionEvaluator {
 
     /**
      * 条件节点判断
-     * @param node
-     * @param context
-     * @return
+     * @param node 条件节点
+     * @param context 上下文数据
+     * @return 布尔值结果
      */
     private boolean evaluateConditionNode(ConditionNode node, Map<String, Object> context) {
         try {
@@ -259,12 +258,8 @@ public class ConditionEvaluator {
                 .orElseThrow(() -> new IllegalArgumentException("Unsupported value comparison operator: " + valueComparison));
         ZonedDateTime date1 = DateConverter.convertToZonedDateTime(obj1);
         ZonedDateTime date2 = DateConverter.convertToZonedDateTime(obj2);
-        if (date1 == null && date2 == null) {
-            // 两个都为 null，认为它们相等
-            return true;
-        }
         if (date1 == null || date2 == null) {
-            // 一边为null，另一边不为 null，则不相等
+            // 只要出现null，无法完成日期相关差值比较，直接返回 false
             return false;
         }
         long diff = unit.between(date2, date1);
@@ -275,7 +270,7 @@ public class ConditionEvaluator {
             case LESS_THAN -> diff < comparedValue.longValue();
             case GREATER_THAN_OR_EQUAL -> diff >= comparedValue.longValue();
             case LESS_THAN_OR_EQUAL -> diff <= comparedValue.longValue();
-            default -> throw new IllegalArgumentException("Unsupported value comparison operator: " + valueComparison);
+            default -> throw new IllegalArgumentException("Unsupported Date Difference value comparison operator: " + valueComparison);
         };
     }
 
