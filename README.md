@@ -34,4 +34,3 @@
 
 
 
-https://github.com/luffytmac1108/parse-expression/releases/download/v0.0.1/custom-event-processor-0.0.1-SNAPSHOT.jar
