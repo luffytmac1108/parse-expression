@@ -10,4 +10,9 @@ public class ExpressionEditorController {
     public String showExpressionEditor11() {
         return "expression_editor11";
     }
+
+    @GetMapping("/cube21")
+    public String cube21() {
+        return "cube21";
+    }
 }

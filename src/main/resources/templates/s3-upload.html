@@ -1,0 +1,382 @@
+<!DOCTYPE html>
+<html lang="zh" xmlns:th="http://www.thymeleaf.org">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1, shrink-to-fit=no">
+    <title>文件上传到 S3</title>
+
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css"
+          rel="stylesheet"
+          integrity="sha384-QWTKZyjpPEjISv5WaRU9OFeRpok6YctnYmDr5pNlyT2bRjXh0JMhjY6hW+ALEwIH"
+          crossorigin="anonymous">
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.3/font/bootstrap-icons.min.css">
+
+    <style>
+        /* ==================================== */
+        /* CSS 样式开始 */
+        /* ==================================== */
+        body {
+            background-color: #f4f7f9;
+            margin: 0;
+            padding: 0;
+            position: relative;
+        }
+
+        /* 全局容器居中 */
+        .container {
+            max-width: 600px;
+            margin: 50px auto;
+            padding: 20px;
+            background-color: #ffffff;
+            border: 1px solid #e0e0e0;
+            border-radius: 8px;
+            box-shadow: 0 4px 12px rgba(0,0,0,0.1);
+            font-family: Arial, sans-serif;
+        }
+
+        h1 {
+            text-align: center;
+            color: #2c3e50;
+            margin-bottom: 25px;
+        }
+
+        /* 拖放区域样式 */
+        .drop-area {
+            border: 2px dashed #a0c3ff;
+            border-radius: 6px;
+            padding: 40px 20px;
+            text-align: center;
+            transition: background-color 0.3s, border-color 0.3s;
+            cursor: pointer;
+            margin-bottom: 20px;
+            color: #7f8c8d;
+        }
+
+        .drop-area.highlight {
+            background-color: #eaf3ff;
+            border-color: #3498db;
+        }
+
+        /* 文件选择按钮 */
+        #fileSelectButton {
+            background-color: #6c757d;
+            color: white;
+            padding: 8px 15px;
+            border: none;
+            border-radius: 4px;
+            cursor: pointer;
+            margin-top: 15px;
+            transition: background-color 0.2s;
+        }
+
+        /* 上传按钮 */
+        #uploadButton {
+            background-color: #28a745;
+            color: white;
+            padding: 10px 20px;
+            border: none;
+            border-radius: 4px;
+            cursor: pointer;
+            margin-top: 15px;
+            transition: background-color 0.2s;
+        }
+
+        #uploadButton:hover:not(:disabled) {
+            background-color: #218838;
+        }
+
+        #uploadButton:disabled {
+            background-color: #bdc3c7;
+            cursor: not-allowed;
+        }
+
+        /* 文件列表容器样式 */
+        .file-list-container {
+            margin-top: 30px;
+            padding: 15px;
+            border: 1px solid #eee;
+            border-radius: 4px;
+            background-color: #f9f9f9;
+        }
+
+        h2 {
+            color: #34495e;
+            border-bottom: 2px solid #ecf0f1;
+            padding-bottom: 10px;
+            margin-top: 0;
+        }
+
+        #file-list {
+            list-style: none;
+            padding: 0;
+        }
+
+        #file-list li {
+            padding: 10px 0;
+            border-bottom: 1px dashed #e0e0e0;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            font-size: 14px;
+        }
+
+        .remove-file {
+            background-color: #dc3545;
+            color: white;
+            border: none;
+            padding: 5px 10px;
+            border-radius: 3px;
+            cursor: pointer;
+            font-size: 12px;
+        }
+
+        /* 状态消息样式 */
+        .status-message {
+            margin-top: 20px;
+            padding: 15px;
+            border-radius: 4px;
+            text-align: center;
+            font-weight: bold;
+        }
+
+        .status-message.success {
+            background-color: #d4edda;
+            color: #155724;
+        }
+
+        .status-message.error {
+            background-color: #f8d7da;
+            color: #721c24;
+        }
+
+        /* 右上角操作区域的定位样式 */
+        .header-actions {
+            position: absolute;
+            top: 30px;
+            right: 30px;
+            z-index: 1000;
+        }
+        /* ==================================== */
+        /* CSS 样式结束 */
+        /* ==================================== */
+    </style>
+</head>
+<body>
+
+<nav class="navbar navbar-dark bg-primary shadow-sm">
+    <div class="container-fluid">
+
+        <a class="navbar-brand" href="#">
+            <i class="bi bi-cloud-fill"></i> AWS S3 安全文件上传
+        </a>
+
+        <div class="ms-auto">
+            <a th:href="@{/s3/images}" class="btn btn-warning text-dark">
+                <i class="bi bi-list"></i> 返回S3文件列表
+            </a>
+        </div>
+
+    </div>
+</nav>
+
+<div class="container">
+    <h1>文件上传到 S3</h1>
+
+    <div id="drop-area" class="drop-area">
+        <p>将文件拖放到此处，或点击选择文件</p>
+        <input type="file" id="fileElem" multiple accept="*" style="display: none;">
+        <button id="fileSelectButton">选择文件</button>
+    </div>
+
+    <div id="file-list-container" class="file-list-container" style="display: none;">
+        <h2>待上传文件</h2>
+        <ul id="file-list">
+        </ul>
+        <button id="uploadButton" disabled>开始上传</button>
+    </div>
+
+    <div id="status-message" class="status-message"></div>
+
+</div>
+
+<script>
+    /* ==================================== */
+    /* JavaScript 逻辑开始 */
+    /* ==================================== */
+    const dropArea = document.getElementById('drop-area');
+    const fileElem = document.getElementById('fileElem');
+    const fileSelectButton = document.getElementById('fileSelectButton');
+    const fileListContainer = document.getElementById('file-list-container');
+    const fileList = document.getElementById('file-list');
+    const uploadButton = document.getElementById('uploadButton');
+    const statusMessage = document.getElementById('status-message');
+
+    let uploadedFiles = [];
+
+    // 1. 绑定文件选择按钮的点击事件
+    fileSelectButton.addEventListener('click', () => {
+        fileElem.click();
+    });
+
+    // 2. 监听文件选择框的改变事件 (包括点击和拖放)
+    fileElem.addEventListener('change', (e) => {
+        handleFiles(e.target.files);
+    });
+
+    // 3. 处理拖放事件
+    ['dragenter', 'dragover', 'dragleave', 'drop'].forEach(eventName => {
+        dropArea.addEventListener(eventName, preventDefaults, false);
+    });
+    ['dragenter', 'dragover'].forEach(eventName => {
+        dropArea.addEventListener(eventName, highlight, false);
+    });
+    ['dragleave', 'drop'].forEach(eventName => {
+        dropArea.addEventListener(eventName, unhighlight, false);
+    });
+    dropArea.addEventListener('drop', handleDrop, false);
+
+    function preventDefaults(e) {
+        e.preventDefault();
+        e.stopPropagation();
+    }
+
+    function highlight() {
+        dropArea.classList.add('highlight');
+    }
+
+    function unhighlight() {
+        dropArea.classList.remove('highlight');
+    }
+
+    function handleDrop(e) {
+        const dt = e.dataTransfer;
+        const files = dt.files;
+        handleFiles(files);
+    }
+
+    // 4. 处理文件列表更新 (已移除清空 statusMessage 的逻辑)
+    function handleFiles(files) {
+        const newFiles = Array.from(files);
+        uploadedFiles = uploadedFiles.concat(newFiles);
+
+        fileList.innerHTML = '';
+        uploadedFiles.forEach((file, index) => {
+            const listItem = document.createElement('li');
+            listItem.innerHTML = `
+                    <span>${file.name} (${(file.size / 1024 / 1024).toFixed(2)} MB)</span>
+                    <button class="remove-file btn btn-danger btn-sm" data-index="${index}">移除</button>
+                `;
+            fileList.appendChild(listItem);
+        });
+
+        if (uploadedFiles.length > 0) {
+            fileListContainer.style.display = 'block';
+            uploadButton.disabled = false;
+        } else {
+            fileListContainer.style.display = 'none';
+            uploadButton.disabled = true;
+        }
+
+        // 当用户选择新文件时，清除旧的状态信息
+        if (files && files.length > 0) {
+            statusMessage.textContent = '';
+            statusMessage.className = 'status-message';
+        }
+
+        fileElem.value = '';
+    }
+
+    // 5. 移除文件逻辑
+    fileList.addEventListener('click', (e) => {
+        if (e.target.classList.contains('remove-file')) {
+            const listItem = e.target.closest('li');
+            const allListItems = Array.from(fileList.children);
+            const index = allListItems.indexOf(listItem);
+
+            if (index > -1) {
+                uploadedFiles.splice(index, 1);
+                handleFiles([]); // 重新渲染列表
+            }
+        }
+    });
+
+    // 6. 上传文件到服务器 (已修正成功后的逻辑)
+    uploadButton.addEventListener('click', uploadFiles);
+
+    function uploadFiles() {
+        if (uploadedFiles.length === 0) return;
+
+        uploadButton.disabled = true;
+        statusMessage.textContent = '正在上传...';
+        statusMessage.className = 'status-message';
+
+        const formData = new FormData();
+        uploadedFiles.forEach(file => {
+            formData.append('file', file);
+        });
+
+        const uploadUrl = '/api/files/upload';
+
+        fetch(uploadUrl, {
+            method: 'POST',
+            body: formData
+        })
+            .then(response => {
+                // 关键修正：始终获取原始文本响应体
+                return response.text().then(responseText => {
+                    return {
+                        ok: response.ok,
+                        status: response.status,
+                        text: responseText
+                    };
+                });
+            })
+            .then(result => {
+                if (!result.ok) {
+                    const errorMsg = result.text || `HTTP 错误 (${result.status})`;
+                    throw new Error(`上传失败: ${errorMsg}`);
+                }
+
+                const tempUrl = result.text;
+
+                if (!tempUrl || tempUrl.trim().length === 0 || tempUrl.toLowerCase() === 'null') {
+                    throw new Error("后端返回成功状态码，但未提供有效的文件 URL。");
+                }
+
+                // ===================================
+                // 【已修复】上传成功后，设置提示信息
+                // ===================================
+                const count = uploadedFiles.length;
+
+                statusMessage.textContent = `✅ 上传成功！已上传 ${count} 个文件。URL: ${tempUrl.substring(0, 50)}... 2 秒后返回列表页...`;
+                statusMessage.classList.add('success');
+
+                // 【关键修复】手动清空文件列表，避免调用 handleFiles() 覆盖 success message
+                uploadedFiles = [];
+                fileList.innerHTML = ''; // 清空 ul 列表
+                fileListContainer.style.display = 'none'; // 隐藏列表容器
+                uploadButton.disabled = true; // 禁用上传按钮
+
+
+                // 上传成功后自动跳转回 S3 文件列表页面（根路径）
+                setTimeout(() => {
+                    window.location.href = '/s3/images';
+                }, 2000);
+            })
+            .catch(error => {
+                // 失败处理
+                statusMessage.textContent = `❌ 上传失败: ${error.message}`;
+                statusMessage.classList.add('error');
+                console.error('上传错误:', error);
+                uploadButton.disabled = false;
+            });
+    }
+
+    // 引入 Bootstrap JS
+    document.write('<script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/js/bootstrap.bundle.min.js"><\/script>');
+    /* ==================================== */
+    /* JavaScript 逻辑结束 */
+    /* ==================================== */
+</script>
+</body>
+</html>

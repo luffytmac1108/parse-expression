@@ -1,0 +1,373 @@
+<!--&lt;!&ndash;<!DOCTYPE html>&ndash;&gt;-->
+<!--&lt;!&ndash;<html lang="zh" xmlns:th="http://www.thymeleaf.org">&ndash;&gt;-->
+<!--&lt;!&ndash;<head>&ndash;&gt;-->
+<!--&lt;!&ndash;    <meta charset="UTF-8">&ndash;&gt;-->
+<!--&lt;!&ndash;    <meta name="viewport" content="width=device-width, initial-scale=1, shrink-to-fit=no">&ndash;&gt;-->
+<!--&lt;!&ndash;    <title>S3 图片列表与预览</title>&ndash;&gt;-->
+
+<!--&lt;!&ndash;    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css"&ndash;&gt;-->
+<!--&lt;!&ndash;          rel="stylesheet"&ndash;&gt;-->
+<!--&lt;!&ndash;          integrity="sha384-QWTKZyjpPEjISv5WaRU9OFeRpok6YctnYmDr5pNlyT2bRjXh0JMhjY6hW+ALEwIH"&ndash;&gt;-->
+<!--&lt;!&ndash;          crossorigin="anonymous">&ndash;&gt;-->
+
+<!--&lt;!&ndash;    <style>&ndash;&gt;-->
+<!--&lt;!&ndash;        /* 自定义样式：确保卡片中的图片清晰且不失真 */&ndash;&gt;-->
+<!--&lt;!&ndash;        .card-img-top {&ndash;&gt;-->
+<!--&lt;!&ndash;            width: 100%;&ndash;&gt;-->
+<!--&lt;!&ndash;            height: 200px; /* 固定高度，保持列表整齐 */&ndash;&gt;-->
+<!--&lt;!&ndash;            object-fit: cover; /* 裁剪图片以适应容器，保持比例 */&ndash;&gt;-->
+<!--&lt;!&ndash;        }&ndash;&gt;-->
+<!--&lt;!&ndash;    </style>&ndash;&gt;-->
+<!--&lt;!&ndash;</head>&ndash;&gt;-->
+<!--&lt;!&ndash;<body>&ndash;&gt;-->
+
+<!--&lt;!&ndash;<nav class="navbar navbar-dark bg-dark">&ndash;&gt;-->
+<!--&lt;!&ndash;    <div class="container-fluid">&ndash;&gt;-->
+<!--&lt;!&ndash;        <a class="navbar-brand" href="#">&ndash;&gt;-->
+<!--&lt;!&ndash;            AWS S3 安全图片列表&ndash;&gt;-->
+<!--&lt;!&ndash;        </a>&ndash;&gt;-->
+<!--&lt;!&ndash;    </div>&ndash;&gt;-->
+<!--&lt;!&ndash;</nav>&ndash;&gt;-->
+
+<!--&lt;!&ndash;<div class="container mt-4">&ndash;&gt;-->
+<!--&lt;!&ndash;    <h1 class="mb-4 text-primary">S3 存储桶图片预览</h1>&ndash;&gt;-->
+
+<!--&lt;!&ndash;    <div th:if="${#lists.isEmpty(imageList)}" class="alert alert-warning" role="alert">&ndash;&gt;-->
+<!--&lt;!&ndash;        存储桶中没有找到任何文件。&ndash;&gt;-->
+<!--&lt;!&ndash;    </div>&ndash;&gt;-->
+
+<!--&lt;!&ndash;    <div class="row row-cols-1 row-cols-md-2 row-cols-lg-4 g-4" th:if="${not #lists.isEmpty(imageList)}">&ndash;&gt;-->
+<!--&lt;!&ndash;        <div class="col" th:each="image : ${imageList}">&ndash;&gt;-->
+<!--&lt;!&ndash;            <div class="card shadow-sm h-100">&ndash;&gt;-->
+
+<!--&lt;!&ndash;                <img th:src="${image.tempImageUrl}"&ndash;&gt;-->
+<!--&lt;!&ndash;                     class="card-img-top"&ndash;&gt;-->
+<!--&lt;!&ndash;                     th:alt="${image.fileName} + ' 预览'"&ndash;&gt;-->
+<!--&lt;!&ndash;                     onerror="this.onerror=null;this.src='https://via.placeholder.com/200?text=Load+Error';">&ndash;&gt;-->
+
+<!--&lt;!&ndash;                <div class="card-body">&ndash;&gt;-->
+<!--&lt;!&ndash;                    <h5 class="card-title text-truncate" th:text="${image.fileName}">文件名.jpg</h5>&ndash;&gt;-->
+<!--&lt;!&ndash;                    <p class="card-text">&ndash;&gt;-->
+<!--&lt;!&ndash;                        大小: <small class="text-muted" th:text="${#numbers.formatDecimal(image.sizeBytes / (1024.0 * 1024.0), 1, 2)} + ' MB'"></small><br>&ndash;&gt;-->
+<!--&lt;!&ndash;                        修改: <small class="text-muted" th:text="${#temporals.format(image.lastModified, 'yyyy-MM-dd HH:mm')}"></small>&ndash;&gt;-->
+<!--&lt;!&ndash;                    </p>&ndash;&gt;-->
+<!--&lt;!&ndash;                </div>&ndash;&gt;-->
+
+<!--&lt;!&ndash;                <div class="card-footer d-grid">&ndash;&gt;-->
+<!--&lt;!&ndash;                    <a th:href="@{/api/files/download/{key}(key=${image.fileKey})}"&ndash;&gt;-->
+<!--&lt;!&ndash;                       class="btn btn-sm btn-outline-success">&ndash;&gt;-->
+<!--&lt;!&ndash;                        下载 (通过代理)&ndash;&gt;-->
+<!--&lt;!&ndash;                    </a>&ndash;&gt;-->
+<!--&lt;!&ndash;                </div>&ndash;&gt;-->
+<!--&lt;!&ndash;            </div>&ndash;&gt;-->
+<!--&lt;!&ndash;        </div>&ndash;&gt;-->
+<!--&lt;!&ndash;    </div>&ndash;&gt;-->
+<!--&lt;!&ndash;</div>&ndash;&gt;-->
+
+<!--&lt;!&ndash;<script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/js/bootstrap.bundle.min.js"&ndash;&gt;-->
+<!--&lt;!&ndash;        integrity="sha384-YvpcrYf0tY3lHB60NNkmXc5s9fDVZLESaAA55NDzOxhy9GkcIdslK1eN7N6jIeHz"&ndash;&gt;-->
+<!--&lt;!&ndash;        crossorigin="anonymous">&ndash;&gt;-->
+<!--&lt;!&ndash;</script>&ndash;&gt;-->
+
+<!--&lt;!&ndash;</body>&ndash;&gt;-->
+<!--&lt;!&ndash;</html>&ndash;&gt;-->
+
+
+
+<!--<!DOCTYPE html>-->
+<!--<html lang="zh" xmlns:th="http://www.thymeleaf.org">-->
+<!--<head>-->
+<!--    <meta charset="UTF-8">-->
+<!--    <meta name="viewport" content="width=device-width, initial-scale=1, shrink-to-fit=no">-->
+<!--    <title th:text="${currentPath != null and currentPath != '' ? 'S3 目录: ' + currentPath : 'S3 存储桶根目录'}">S3 图片列表与预览</title>-->
+
+<!--    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css"-->
+<!--          rel="stylesheet"-->
+<!--          integrity="sha384-QWTKZyjpPEjISv5WaRU9OFeRpok6YctnYmDr5pNlyT2bRjXh0JMhjY6hW+ALEwIH"-->
+<!--          crossorigin="anonymous">-->
+<!--    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.3/font/bootstrap-icons.min.css">-->
+
+<!--    <style>-->
+<!--        /* 自定义样式：确保卡片中的图片清晰且不失真 */-->
+<!--        .card-img-top {-->
+<!--            width: 100%;-->
+<!--            height: 200px; /* 固定高度，保持列表整齐 */-->
+<!--            object-fit: cover; /* 裁剪图片以适应容器，保持比例 */-->
+<!--            border-bottom: 1px solid #eee;-->
+<!--        }-->
+<!--        /* 文件夹卡片的特殊样式 */-->
+<!--        .folder-card .card-img-top {-->
+<!--            background-color: #f8f9fa;-->
+<!--            color: #ffc107; /* 文件夹图标颜色 */-->
+<!--            display: flex;-->
+<!--            align-items: center;-->
+<!--            justify-content: center;-->
+<!--            font-size: 5rem;-->
+<!--        }-->
+<!--        /* 非图片文件的图标容器样式 */-->
+<!--        .file-icon-container {-->
+<!--            height: 200px;-->
+<!--            display: flex;-->
+<!--            align-items: center;-->
+<!--            justify-content: center;-->
+<!--            background-color: #e9ecef;-->
+<!--            border-bottom: 1px solid #eee;-->
+<!--        }-->
+<!--        .file-icon-container i {-->
+<!--            font-size: 4rem;-->
+<!--            color: #6c757d; /* 默认文件图标颜色 */-->
+<!--        }-->
+<!--    </style>-->
+<!--</head>-->
+<!--<body>-->
+
+<!--<nav class="navbar navbar-dark bg-primary shadow-sm">-->
+<!--    <div class="container-fluid">-->
+<!--        <a class="navbar-brand" href="/">-->
+<!--            <i class="bi bi-cloud-fill"></i> AWS S3 安全文件列表-->
+<!--        </a>-->
+<!--    </div>-->
+<!--</nav>-->
+
+<!--<div class="container mt-4">-->
+<!--    <h1 class="mb-4 text-primary">S3 存储桶内容</h1>-->
+
+<!--    <nav aria-label="breadcrumb" class="mb-3">-->
+<!--        <ol class="breadcrumb">-->
+<!--            <li class="breadcrumb-item">-->
+<!--                <a th:href="@{/}" class="text-decoration-none">根目录</a>-->
+<!--            </li>-->
+<!--            <li class="breadcrumb-item" th:each="segment : ${pathSegments}">-->
+<!--                <a th:href="@{/list(prefix=${segment.path})}" th:text="${segment.name}" class="text-decoration-none">子目录</a>-->
+<!--            </li>-->
+<!--            <li class="breadcrumb-item active" aria-current="page" th:text="${currentDirName ?: '根目录'}">当前文件夹</li>-->
+<!--        </ol>-->
+<!--    </nav>-->
+
+<!--    <div th:if="${#lists.isEmpty(imageList) and #lists.isEmpty(folderList)}" class="alert alert-warning" role="alert">-->
+<!--        当前目录中没有找到任何文件或文件夹。-->
+<!--    </div>-->
+
+<!--    <div class="row row-cols-1 row-cols-sm-2 row-cols-md-3 row-cols-lg-4 g-4">-->
+
+<!--        <div class="col" th:each="folder : ${folderList}">-->
+<!--            <div class="card shadow-sm h-100 folder-card">-->
+<!--                <a th:href="@{/list(prefix=${folder.prefix})}" class="text-decoration-none text-dark">-->
+<!--                    <div class="card-img-top">-->
+<!--                        <i class="bi bi-folder-fill"></i>-->
+<!--                    </div>-->
+<!--                    <div class="card-body">-->
+<!--                        <h5 class="card-title text-truncate" th:text="${folder.name}">文件夹名称/</h5>-->
+<!--                        <p class="card-text text-muted">-->
+<!--                            <small>目录</small>-->
+<!--                        </p>-->
+<!--                    </div>-->
+<!--                </a>-->
+<!--            </div>-->
+<!--        </div>-->
+
+<!--        <div class="col" th:each="image : ${imageList}">-->
+<!--            <div class="card shadow-sm h-100">-->
+
+<!--                <th:block th:if="${image.isImage()}">-->
+<!--                    <img th:src="${image.tempImageUrl}"-->
+<!--                         class="card-img-top"-->
+<!--                         th:alt="${image.fileName} + ' 预览'"-->
+<!--                         onerror="this.onerror=null;this.src='https://via.placeholder.com/200?text=Load+Error';">-->
+<!--                </th:block>-->
+<!--                <th:block th:unless="${image.isImage()}">-->
+<!--                    <div class="file-icon-container">-->
+<!--                        <i class="bi bi-file-earmark-fill"></i>-->
+<!--                    </div>-->
+<!--                </th:block>-->
+
+<!--                <div class="card-body">-->
+<!--                    <h5 class="card-title text-truncate" th:text="${image.fileName}">文件名.jpg</h5>-->
+<!--                    <p class="card-text small">-->
+<!--                        扩展名: <span class="text-info" th:text="${image.fileExtension}">.jpg</span><br>-->
+<!--                        大小: <span class="text-muted" th:text="${#numbers.formatDecimal(image.sizeBytes / (1024.0 * 1024.0), 1, 2)} + ' MB'">0.50 MB</span><br>-->
+<!--                        修改: <span class="text-muted" th:text="${#temporals.format(image.lastModified, 'yyyy-MM-dd HH:mm')}">2025-10-15 10:00</span>-->
+<!--                    </p>-->
+<!--                </div>-->
+
+<!--                <div class="card-footer d-grid">-->
+<!--                    <a th:href="@{/api/files/download/{key}(key=${image.fileKey})}"-->
+<!--                       class="btn btn-sm btn-outline-success">-->
+<!--                        <i class="bi bi-download"></i> 下载 (安全代理)-->
+<!--                    </a>-->
+<!--                </div>-->
+<!--            </div>-->
+<!--        </div>-->
+<!--    </div>-->
+
+<!--    <div class="mb-5"></div>-->
+
+<!--</div>-->
+
+<!--<script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/js/bootstrap.bundle.min.js"-->
+<!--        integrity="sha384-YvpcrYf0tY3lHB60NNkmXc5s9fDVZLESaAA55NDzOxhy9GkcIdslK1eN7N6jIeHz"-->
+<!--        crossorigin="anonymous">-->
+<!--</script>-->
+
+<!--</body>-->
+<!--</html>-->
+
+
+
+
+
+
+<!DOCTYPE html>
+<html lang="zh" xmlns:th="http://www.thymeleaf.org">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1, shrink-to-fit=no">
+    <title th:text="${currentPath != null and currentPath != '' ? 'S3 目录: ' + currentPath : 'S3 存储桶根目录'}">S3 图片列表与预览</title>
+
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css"
+          rel="stylesheet"
+          integrity="sha384-QWTKZyjpPEjISv5WaRU9OFeRpok6YctnYmDr5pNlyT2bRjXh0JMhjY6hW+ALEwIH"
+          crossorigin="anonymous">
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.3/font/bootstrap-icons.min.css">
+
+    <style>
+        /* 自定义样式：确保卡片中的图片清晰且不失真 */
+        .card-img-top {
+            width: 100%;
+            height: 200px; /* 固定高度，保持列表整齐 */
+            object-fit: cover; /* 裁剪图片以适应容器，保持比例 */
+            border-bottom: 1px solid #eee;
+        }
+        /* 文件夹卡片的特殊样式 */
+        .folder-card .card-img-top {
+            background-color: #f8f9fa;
+            color: #ffc107; /* 文件夹图标颜色 */
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 5rem;
+        }
+        /* 非图片文件的图标容器样式 */
+        .file-icon-container {
+            height: 200px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            background-color: #e9ecef;
+            border-bottom: 1px solid #eee;
+        }
+        .file-icon-container i {
+            font-size: 4rem;
+            color: #6c757d; /* 默认文件图标颜色 */
+        }
+        /* 确保导航栏中的按钮在右侧（虽然 Bootstrap 默认是这样） */
+        .navbar .ms-auto {
+            margin-left: auto !important;
+        }
+    </style>
+</head>
+<body>
+
+<nav class="navbar navbar-dark bg-primary shadow-sm">
+    <div class="container-fluid">
+
+        <a class="navbar-brand" href="/">
+            <i class="bi bi-cloud-fill"></i> AWS S3 安全文件列表
+        </a>
+
+        <div class="ms-auto">
+            <a th:href="@{/s3/upload}" class="btn btn-warning text-dark">
+                <i class="bi bi-upload"></i> 上传文件
+            </a>
+        </div>
+
+    </div>
+</nav>
+
+<div class="container mt-4">
+    <h1 class="mb-4 text-primary">S3 存储桶内容</h1>
+
+    <nav aria-label="breadcrumb" class="mb-3">
+        <ol class="breadcrumb">
+            <li class="breadcrumb-item">
+                <a th:href="@{/}" class="text-decoration-none">根目录</a>
+            </li>
+            <li class="breadcrumb-item" th:each="segment : ${pathSegments}">
+                <a th:href="@{/list(prefix=${segment.path})}" th:text="${segment.name}" class="text-decoration-none">子目录</a>
+            </li>
+            <li class="breadcrumb-item active" aria-current="page" th:text="${currentDirName ?: '根目录'}">当前文件夹</li>
+        </ol>
+    </nav>
+
+    <div th:if="${#lists.isEmpty(imageList) and #lists.isEmpty(folderList)}" class="alert alert-warning" role="alert">
+        当前目录中没有找到任何文件或文件夹。
+    </div>
+
+    <div class="row row-cols-1 row-cols-sm-2 row-cols-md-3 row-cols-lg-4 g-4">
+
+        <div class="col" th:each="folder : ${folderList}">
+            <div class="card shadow-sm h-100 folder-card">
+                <a th:href="@{/list(prefix=${folder.prefix})}" class="text-decoration-none text-dark">
+                    <div class="card-img-top">
+                        <i class="bi bi-folder-fill"></i>
+                    </div>
+                    <div class="card-body">
+                        <h5 class="card-title text-truncate" th:text="${folder.name}">文件夹名称/</h5>
+                        <p class="card-text text-muted">
+                            <small>目录</small>
+                        </p>
+                    </div>
+                </a>
+            </div>
+        </div>
+
+        <div class="col" th:each="image : ${imageList}">
+            <div class="card shadow-sm h-100">
+
+                <th:block th:if="${image.isImage()}">
+                    <img th:src="${image.tempImageUrl}"
+                         class="card-img-top"
+                         th:alt="${image.fileName} + ' 预览'"
+                         onerror="this.onerror=null;this.src='https://via.placeholder.com/200?text=Load+Error';">
+                </th:block>
+                <th:block th:unless="${image.isImage()}">
+                    <div class="file-icon-container">
+                        <i class="bi bi-file-earmark-fill"></i>
+                    </div>
+                </th:block>
+
+                <div class="card-body">
+                    <h5 class="card-title text-truncate" th:text="${image.fileName}">文件名.jpg</h5>
+                    <p class="card-text small">
+                        扩展名: <span class="text-info" th:text="${image.fileExtension}">.jpg</span><br>
+                        大小: <span class="text-muted" th:text="${#numbers.formatDecimal(image.sizeBytes / (1024.0), 1, 2)} + ' KB'">0.50 KB</span><br>
+                        修改: <span class="text-muted" th:text="${#temporals.format(image.lastModified, 'yyyy-MM-dd HH:mm')}">2025-10-15 10:00</span>
+                    </p>
+                </div>
+
+                <div class="card-footer d-grid">
+                    <a th:href="@{/api/files/download(fileKey=${image.fileKey})}"
+                       class="btn btn-sm btn-outline-success">
+                        <i class="bi bi-download"></i> 下载 (安全代理)
+                    </a>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <div class="mb-5"></div>
+
+</div>
+
+<script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/js/bootstrap.bundle.min.js"
+        integrity="sha384-YvpcrYf0tY3lHB60NNkmXc5s9fDVZLESaAA55NDzOxhy9GkcIdslK1eN7N6jIeHz"
+        crossorigin="anonymous">
+</script>
+
+</body>
+</html>
+
+
+
+
+
